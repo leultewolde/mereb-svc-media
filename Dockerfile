@@ -10,9 +10,9 @@ COPY tsconfig.base.json tsconfig.base.json
 COPY tsconfig.json tsconfig.json
 COPY tsconfig.eslint.json tsconfig.eslint.json
 
-RUN corepack enable; \
-    pnpm install --frozen-lockfile; \
-    pnpm run prisma:generate; \
+RUN corepack enable && \
+    pnpm install --frozen-lockfile && \
+    pnpm run prisma:generate && \
     pnpm run build
 
 CMD ["node", "dist/index.js"]
