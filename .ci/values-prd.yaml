@@ -1,0 +1,64 @@
+nameOverride: svc-media
+
+replicaCount: 3
+
+imagePullSecrets:
+  - regcred
+
+image:
+  repository: registry.leultewolde.com/mereb/svc-media
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: SERVICE_NAME
+      value: svc-media
+  envFrom:
+    - configMapRef:
+        name: svc-media-prd-config
+    - secretRef:
+        name: svc-media-prd-secrets
+        optional: true
+
+service:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      containerPort: 4003
+
+ingress:
+  enabled: true
+  className: kong
+  annotations:
+    kubernetes.io/ingress.class: kong
+    cert-manager.io/cluster-issuer: letsencrypt-http
+    konghq.com/strip-path: "true"
+  hosts:
+    - host: api.mereb.app
+      paths:
+        - path: /media
+          pathType: Prefix
+          servicePort: http
+  tls:
+    - secretName: media-prd-tls
+      hosts:
+        - api.mereb.app
+
+configMap:
+  enabled: true
+  nameOverride: svc-media-prd-config
+  data:
+    PORT: "4003"
+    OIDC_ISSUER: https://idp.mereb.social/realms/mereb
+    OIDC_AUDIENCE: mereb
+    S3_ENDPOINT: http://platform-prd-minio.platform-prd.svc.cluster.local:9000
+    S3_REGION: us-east-1
+    S3_BUCKET: media
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi

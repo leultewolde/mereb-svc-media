@@ -1,0 +1,64 @@
+nameOverride: svc-media
+
+replicaCount: 2
+
+imagePullSecrets:
+  - regcred
+
+image:
+  repository: registry.leultewolde.com/mereb/svc-media
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: SERVICE_NAME
+      value: svc-media
+  envFrom:
+    - configMapRef:
+        name: svc-media-stg-config
+    - secretRef:
+        name: svc-media-stg-secrets
+        optional: true
+
+service:
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      containerPort: 4003
+
+ingress:
+  enabled: true
+  className: kong
+  annotations:
+    kubernetes.io/ingress.class: kong
+    cert-manager.io/cluster-issuer: letsencrypt-http
+    konghq.com/strip-path: "true"
+  hosts:
+    - host: api-stg.mereb.app
+      paths:
+        - path: /media
+          pathType: Prefix
+          servicePort: http
+  tls:
+    - secretName: media-stg-tls
+      hosts:
+        - api-stg.mereb.app
+
+configMap:
+  enabled: true
+  nameOverride: svc-media-stg-config
+  data:
+    PORT: "4003"
+    OIDC_ISSUER: https://idp.stg.mereb.social/realms/mereb
+    OIDC_AUDIENCE: mereb-stg
+    S3_ENDPOINT: http://platform-stg-minio.platform-stg.svc.cluster.local:9000
+    S3_REGION: us-east-1
+    S3_BUCKET: media-stg
+
+resources:
+  requests:
+    cpu: 125m
+    memory: 192Mi
+  limits:
+    cpu: 350m
+    memory: 640Mi

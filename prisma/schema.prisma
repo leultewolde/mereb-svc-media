@@ -1,0 +1,21 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  ownerId   String
+  kind      String
+  s3Key     String
+  status    String   @default("pending")
+  variants  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
