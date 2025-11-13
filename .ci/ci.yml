@@ -39,7 +39,7 @@ deploy:
     when: branch=main & !pr
     autoPromote: true
     smoke:
-      url: https://media.dev.mereb.social/healthz
+      url: https://api-dev.mereb.app/media/healthz
 
   stg:
     release: svc-media-stg
@@ -56,7 +56,7 @@ deploy:
       message: "Promote svc-media deployment to staging?"
       submitter: release-managers
     smoke:
-      url: https://media.stg.mereb.social/healthz
+      url: https://api-stg.mereb.app/media/healthz
 
   prd:
     release: svc-media
@@ -72,7 +72,7 @@ deploy:
       message: "Deploy svc-media to production?"
       submitter: release-managers
     smoke:
-      url: https://media.mereb.social/healthz
+      url: https://api.mereb.app/media/healthz
 
 signing:
   enabled: false
