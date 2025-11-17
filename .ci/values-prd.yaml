@@ -1,6 +1,6 @@
 nameOverride: svc-media
 
-replicaCount: 3
+replicaCount: 2
 
 imagePullSecrets:
   - regcred
@@ -57,8 +57,14 @@ configMap:
 
 resources:
   requests:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 150m
+    memory: 224Mi
   limits:
-    cpu: 500m
-    memory: 768Mi
+    cpu: 450m
+    memory: 640Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
