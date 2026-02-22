@@ -1,10 +1,10 @@
-import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import multipart from '@fastify/multipart';
 import {
-  createLogger,
+  createFastifyLoggerOptions,
   loadEnv,
   parseAuthHeader,
   verifyJwt
@@ -13,10 +13,10 @@ import { registerUploadRoutes } from './routes/uploads.js';
 
 loadEnv();
 
-const logger = createLogger('svc-media');
-
 export async function buildServer(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: logger as FastifyBaseLogger });
+  const app = Fastify({
+    logger: createFastifyLoggerOptions('svc-media')
+  });
 
   await app.register(helmet);
   await app.register(cors, { origin: true, credentials: true });

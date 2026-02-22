@@ -16,6 +16,7 @@ image:
   context: .
   dockerfile: Dockerfile
   tagStrategy: branch-sha
+  tagTemplate: "{{tagName}}"
   push:
     enabled: true
     when: '!pr'
@@ -36,6 +37,7 @@ deploy:
     repoCredentialId: helm-chart-creds
     valuesFiles:
       - .ci/values-dev.yaml
+      - .ci/.rendered/values-dev.secret.yaml
     valuesTemplates:
       - template: .ci/templates/values-secret.yaml.tpl
         output: .ci/.rendered/values-dev.secret.yaml
@@ -44,6 +46,9 @@ deploy:
           DATABASE_URL:
             vaultPath: kv/data/apps/dev
             vaultField: DATABASE_URL
+          SPLUNK_HEC_TOKEN:
+            vaultPath: kv/data/apps/dev
+            vaultField: SPLUNK_HEC_TOKEN
     vault:
       url: https://vault.leultewolde.com
       tokenEnv: VAULT_TOKEN
@@ -68,6 +73,7 @@ deploy:
     repoCredentialId: helm-chart-creds
     valuesFiles:
       - .ci/values-stg.yaml
+      - .ci/.rendered/values-stg.secret.yaml
     valuesTemplates:
       - template: .ci/templates/values-secret.yaml.tpl
         output: .ci/.rendered/values-stg.secret.yaml
@@ -76,6 +82,9 @@ deploy:
           DATABASE_URL:
             vaultPath: kv/data/apps/stg
             vaultField: DATABASE_URL
+          SPLUNK_HEC_TOKEN:
+            vaultPath: kv/data/apps/stg
+            vaultField: SPLUNK_HEC_TOKEN
     vault:
       url: https://vault.leultewolde.com
       tokenEnv: VAULT_TOKEN
@@ -104,6 +113,7 @@ deploy:
     repoCredentialId: helm-chart-creds
     valuesFiles:
       - .ci/values-prd.yaml
+      - .ci/.rendered/values-prd.secret.yaml
     valuesTemplates:
       - template: .ci/templates/values-secret.yaml.tpl
         output: .ci/.rendered/values-prd.secret.yaml
@@ -112,6 +122,9 @@ deploy:
           DATABASE_URL:
             vaultPath: kv/data/apps/prd
             vaultField: DATABASE_URL
+          SPLUNK_HEC_TOKEN:
+            vaultPath: kv/data/apps/prd
+            vaultField: SPLUNK_HEC_TOKEN
     vault:
       url: https://vault.leultewolde.com
       tokenEnv: VAULT_TOKEN

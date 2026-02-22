@@ -1,7 +1,8 @@
 import { buildServer } from './server.js';
-import { getNumberEnv, loadEnv } from '@mereb/shared-packages';
+import { getNumberEnv, initDefaultTelemetry, loadEnv } from '@mereb/shared-packages';
 
 loadEnv();
+initDefaultTelemetry('svc-media');
 
 const PORT = getNumberEnv('PORT', 4003);
 const HOST = process.env.HOST ?? '0.0.0.0';

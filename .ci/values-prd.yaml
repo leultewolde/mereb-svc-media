@@ -12,6 +12,12 @@ image:
       value: production
     - name: SERVICE_NAME
       value: svc-media
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://otel-collector.platform-prd.svc.cluster.local:4318
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: http/protobuf
+    - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+      value: http/protobuf
   envFrom:
     - configMapRef:
         name: svc-media-prd-config
@@ -54,6 +60,8 @@ configMap:
     S3_ENDPOINT: http://platform-prd-minio.platform-prd.svc.cluster.local:9000
     S3_REGION: us-east-1
     S3_BUCKET: media
+    SPLUNK_HEC_URL: https://splunk-hec.mereb.app/services/collector/event
+    SPLUNK_HEC_INDEX: logs-prd
 
 resources:
   requests:
