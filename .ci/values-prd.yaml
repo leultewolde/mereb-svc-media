@@ -28,7 +28,7 @@ image:
     - configMapRef:
         name: svc-media-prd-config
     - secretRef:
-        name: svc-media-prd-secrets
+        name: svc-media-secrets
         optional: true
 
 service:
