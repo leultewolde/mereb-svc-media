@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { registerUploadRoutes } from '../src/adapters/inbound/http/upload-routes.js';

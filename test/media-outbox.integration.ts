@@ -1,189 +1,232 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, test } from 'vitest';
+import { GenericContainer, Wait } from 'testcontainers';
+import {
+  createKafkaIntegrationEventPublisher,
+  disconnectProducer
+} from '@mereb/shared-packages';
+import {
+  createTemporarySchemaName,
+  dropSchema,
+  provisionSchema,
+  runPrismaMigrateDeploy,
+  withSchema
+} from '@mereb/shared-packages/testing/db';
+import {
+  ensureKafkaTopicExists,
+  waitForKafkaTopicMessages
+} from '@mereb/shared-packages/testing/kafka';
 import { PrismaClient } from '../generated/client/index.js';
-import { createMediaApplicationModule } from '../src/application/media/use-cases.js';
 import {
   PrismaMediaAssetRepository,
   PrismaMediaOutboxRelayStore,
   PrismaMediaTransactionRunner
 } from '../src/adapters/outbound/prisma/media-prisma-asset-repository.js';
-import { MEDIA_EVENT_TOPICS } from '../src/contracts/media-events.js';
+import { createMediaApplicationModule } from '../src/application/media/use-cases.js';
 import { flushMediaOutboxOnce } from '../src/bootstrap/outbox-relay.js';
-import {
-  ensureKafkaTopicExists,
-  createSocketForwardKafkaPublisher,
-  createTemporarySchemaName,
-  dropSchema,
-  installDnsOverride,
-  provisionSchema,
-  runPrismaMigrateDeploy,
-  waitForKafkaMessage,
-  withSchema
-} from '../../../scripts/test-support/db-kafka-integration.mjs';
+import { MEDIA_EVENT_TOPICS } from '../src/contracts/media-events.js';
 
-test('requestUpload writes to outbox and publishes to Kafka', { timeout: 30_000 }, async () => {
-  const adminUrl =
-    process.env.MEDIA_INTEGRATION_DATABASE_ADMIN_URL ??
-    'postgresql://postgres:postgres@localhost:5432/mereb-db?schema=public';
-  const baseServiceUrl =
-    process.env.MEDIA_INTEGRATION_DATABASE_URL ??
-    'postgresql://svc_media_rw:svc_media_rw@localhost:5432/mereb-db?schema=svc_media';
-  const schemaOwner = process.env.MEDIA_INTEGRATION_SCHEMA_OWNER ?? 'svc_media_rw';
-  const brokers = (
-    process.env.MEDIA_INTEGRATION_KAFKA_BROKERS ??
-    process.env.KAFKA_BROKERS ??
-    'localhost:9092'
-  )
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+const serviceDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const databaseName = 'mereb-db';
+const roleName = 'svc_media_rw';
 
-  const schema = createTemporarySchemaName('svc_media_it');
-  const databaseUrl = withSchema(baseServiceUrl, schema);
-  const admin = new PrismaClient({ datasources: { db: { url: adminUrl } } });
-  let prisma: PrismaClient | null = null;
-  let publisherHandle:
-    | Awaited<ReturnType<typeof createSocketForwardKafkaPublisher>>
-    | null = null;
-  const restoreDns = installDnsOverride(
-    brokers.map((broker) => broker.split(':')[0] ?? broker)
-  );
-  const useRpkConsumer = Boolean(
-    process.env.KAFKA_RPK_NAMESPACE &&
-      process.env.KAFKA_RPK_POD &&
-      process.env.KAFKA_RPK_BROKER
-  );
+type StartedContainer = Awaited<ReturnType<GenericContainer['start']>>;
 
-  const previousKafkaBrokers = process.env.KAFKA_BROKERS;
-  const previousKafkaSsl = process.env.KAFKA_SSL;
-  const previousKafkaPortForwardHost = process.env.KAFKA_PORT_FORWARD_HOST;
-  const previousKafkaPortForwardPort = process.env.KAFKA_PORT_FORWARD_PORT;
+let postgresContainer: StartedContainer | null = null;
+let redpandaContainer: StartedContainer | null = null;
 
-  try {
-    await provisionSchema(admin, { schema, ownerRole: schemaOwner });
-    await runPrismaMigrateDeploy({
-      serviceDir: 'services/svc-media',
-      databaseUrl
-    });
+beforeAll(async () => {
+  postgresContainer = await new GenericContainer('postgres:16')
+    .withEnvironment({
+      POSTGRES_DB: databaseName,
+      POSTGRES_USER: 'postgres',
+      POSTGRES_PASSWORD: 'postgres'
+    })
+    .withExposedPorts(5432)
+    .withWaitStrategy(Wait.forLogMessage('database system is ready to accept connections'))
+    .start();
 
-    prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-    const assets = new PrismaMediaAssetRepository(prisma);
-    const transactionRunner = new PrismaMediaTransactionRunner(prisma);
-    const media = createMediaApplicationModule({
-      assets,
-      uploadKeyGenerator: {
-        createUploadKey(ownerId, filename) {
-          return `uploads/${ownerId}/${filename}`;
-        }
-      },
-      uploadUrlSigner: {
-        async createPutUrl(key, contentType) {
-          return `put:${key}:${contentType}`;
-        }
-      },
-      mediaUrlSigner: {
-        signMediaUrl(key) {
-          return `get:${key}`;
-        }
-      },
-      transactionRunner
-    });
+  redpandaContainer = await new GenericContainer('redpandadata/redpanda:v24.1.11')
+    .withCommand([
+      'redpanda',
+      'start',
+      '--overprovisioned',
+      '--smp',
+      '1',
+      '--memory',
+      '1G',
+      '--reserve-memory',
+      '0M',
+      '--node-id',
+      '0',
+      '--check=false'
+    ])
+    .withExposedPorts(9092)
+    .withWaitStrategy(Wait.forListeningPorts())
+    .start();
+}, 60_000);
 
-    let expectedAssetId = '';
-    delete process.env.KAFKA_PORT_FORWARD_HOST;
-    delete process.env.KAFKA_PORT_FORWARD_PORT;
-    const consumeMessage = useRpkConsumer
-      ? null
-      : waitForKafkaMessage({
-          brokers,
-          topic: MEDIA_EVENT_TOPICS.uploadRequested,
-          groupId: `svc-media-it-${schema}`,
-          predicate: ({ value }) => {
-            const parsed = JSON.parse(value) as { data?: { asset_id?: string } };
-            return parsed.data?.asset_id === expectedAssetId;
-          }
-        });
-
-    const response = await media.commands.requestUpload.execute(
-      { filename: 'avatar.png', contentType: 'image/png' },
-      media.helpers.toExecutionContext('user-1')
-    );
-    expectedAssetId = response.assetId;
-
-    const store = new PrismaMediaOutboxRelayStore(prisma);
-    const pendingBefore = await store.listDue(10);
-    assert.equal(pendingBefore.length, 1);
-
-    await ensureKafkaTopicExists(MEDIA_EVENT_TOPICS.uploadRequested);
-    publisherHandle = await createSocketForwardKafkaPublisher({
-      brokers,
-      clientId: `svc-media-it-publisher-${schema}`,
-      forwardHost: '127.0.0.1',
-      forwardPort: 19092,
-      sslInsecure: true
-    });
-
-    await flushMediaOutboxOnce({
-      limit: 10,
-      store,
-      publisher: publisherHandle.publisher
-    });
-    const message = useRpkConsumer
-      ? await waitForKafkaMessage({
-          brokers,
-          topic: MEDIA_EVENT_TOPICS.uploadRequested,
-          groupId: `svc-media-it-${schema}`,
-          predicate: ({ value }) => {
-            const parsed = JSON.parse(value) as { data?: { asset_id?: string } };
-            return parsed.data?.asset_id === expectedAssetId;
-          }
-        })
-      : await consumeMessage;
-    const envelope = JSON.parse(message.value) as {
-      event_type: string;
-      data: { asset_id: string };
-    };
-
-    assert.equal(envelope.event_type, MEDIA_EVENT_TOPICS.uploadRequested);
-    assert.equal(envelope.data.asset_id, response.assetId);
-
-    const row = await prisma.outboxEvent.findUnique({
-      where: { id: pendingBefore[0]?.id ?? '' }
-    });
-    assert.equal(row?.status, 'PUBLISHED');
-  } finally {
-    if (previousKafkaBrokers === undefined) {
-      delete process.env.KAFKA_BROKERS;
-    } else {
-      process.env.KAFKA_BROKERS = previousKafkaBrokers;
-    }
-
-    if (previousKafkaSsl === undefined) {
-      delete process.env.KAFKA_SSL;
-    } else {
-      process.env.KAFKA_SSL = previousKafkaSsl;
-    }
-
-    if (previousKafkaPortForwardHost === undefined) {
-      delete process.env.KAFKA_PORT_FORWARD_HOST;
-    } else {
-      process.env.KAFKA_PORT_FORWARD_HOST = previousKafkaPortForwardHost;
-    }
-
-    if (previousKafkaPortForwardPort === undefined) {
-      delete process.env.KAFKA_PORT_FORWARD_PORT;
-    } else {
-      process.env.KAFKA_PORT_FORWARD_PORT = previousKafkaPortForwardPort;
-    }
-
-    if (prisma) {
-      await prisma.$disconnect();
-    }
-    if (publisherHandle) {
-      await publisherHandle.disconnect();
-    }
-    await dropSchema(admin, schema);
-    await admin.$disconnect();
-    restoreDns();
+afterAll(async () => {
+  await disconnectProducer().catch(() => undefined);
+  if (redpandaContainer) {
+    await redpandaContainer.stop();
   }
-});
+  if (postgresContainer) {
+    await postgresContainer.stop();
+  }
+}, 60_000);
+
+function getAdminDatabaseUrl(): string {
+  if (!postgresContainer) {
+    throw new Error('Postgres container not started');
+  }
+
+  return `postgresql://postgres:postgres@${postgresContainer.getHost()}:${postgresContainer.getMappedPort(5432)}/${databaseName}?schema=public`;
+}
+
+function getBaseServiceDatabaseUrl(): string {
+  if (!postgresContainer) {
+    throw new Error('Postgres container not started');
+  }
+
+  return `postgresql://${roleName}:${roleName}@${postgresContainer.getHost()}:${postgresContainer.getMappedPort(5432)}/${databaseName}?schema=svc_media`;
+}
+
+function getKafkaConfig(): Parameters<typeof createKafkaIntegrationEventPublisher>[0] {
+  if (!redpandaContainer) {
+    throw new Error('Redpanda container not started');
+  }
+
+  const host = redpandaContainer.getHost();
+  const port = redpandaContainer.getMappedPort(9092);
+
+  return {
+    clientId: 'svc-media-it',
+    brokers: [`${host}:${port}`],
+    socketFactory: ({ onConnect }) => net.connect({ host, port }, onConnect)
+  };
+}
+
+async function ensureServiceRole(admin: PrismaClient): Promise<void> {
+  await admin.$executeRawUnsafe(`
+    DO $role$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${roleName}') THEN
+        CREATE ROLE ${roleName} LOGIN PASSWORD '${roleName}';
+      ELSE
+        ALTER ROLE ${roleName} WITH LOGIN PASSWORD '${roleName}';
+      END IF;
+    END
+    $role$;
+  `);
+  await admin.$executeRawUnsafe(
+    `GRANT CONNECT ON DATABASE "${databaseName}" TO ${roleName}`
+  );
+}
+
+test(
+  'requestUpload writes an outbox event and publishes it to Kafka',
+  { timeout: 60_000 },
+  async () => {
+    const schema = createTemporarySchemaName('svc_media_it');
+    const databaseUrl = withSchema(getBaseServiceDatabaseUrl(), schema);
+    const kafkaConfig = getKafkaConfig();
+    const admin = new PrismaClient({
+      datasources: {
+        db: {
+          url: getAdminDatabaseUrl()
+        }
+      }
+    });
+    let prisma: PrismaClient | null = null;
+
+    try {
+      await ensureServiceRole(admin);
+      await provisionSchema(admin, { schema, ownerRole: roleName });
+      await runPrismaMigrateDeploy({
+        cwd: serviceDir,
+        databaseUrl
+      });
+
+      prisma = new PrismaClient({
+        datasources: {
+          db: {
+            url: databaseUrl
+          }
+        }
+      });
+
+      const media = createMediaApplicationModule({
+        assets: new PrismaMediaAssetRepository(prisma),
+        uploadKeyGenerator: {
+          createUploadKey(ownerId, filename) {
+            return `uploads/${ownerId}/${filename}`;
+          }
+        },
+        uploadUrlSigner: {
+          async createPutUrl(key, contentType) {
+            return `put:${key}:${contentType}`;
+          }
+        },
+        mediaUrlSigner: {
+          signMediaUrl(key) {
+            return `get:${key}`;
+          }
+        },
+        transactionRunner: new PrismaMediaTransactionRunner(prisma)
+      });
+
+      const response = await media.commands.requestUpload.execute(
+        { filename: 'avatar.png', contentType: 'image/png' },
+        media.helpers.toExecutionContext('user-1')
+      );
+
+      const asset = await prisma.mediaAsset.findUnique({
+        where: { id: response.assetId }
+      });
+      assert.equal(asset?.ownerId, 'user-1');
+
+      const store = new PrismaMediaOutboxRelayStore(prisma);
+      const pendingBefore = await store.listDue(10);
+      assert.equal(pendingBefore.length, 1);
+      assert.equal(pendingBefore[0]?.topic, MEDIA_EVENT_TOPICS.uploadRequested);
+      assert.equal(
+        (pendingBefore[0]?.envelope.data as { asset_id?: string } | undefined)?.asset_id,
+        response.assetId
+      );
+
+      await ensureKafkaTopicExists({
+        ...kafkaConfig,
+        topic: MEDIA_EVENT_TOPICS.uploadRequested
+      });
+
+      await flushMediaOutboxOnce({
+        limit: 10,
+        store,
+        publisher: createKafkaIntegrationEventPublisher(kafkaConfig)
+      });
+
+      const messageCount = await waitForKafkaTopicMessages({
+        ...kafkaConfig,
+        topic: MEDIA_EVENT_TOPICS.uploadRequested,
+        minMessages: 1
+      });
+      assert.equal(messageCount, 1);
+
+      const row = await prisma.outboxEvent.findUnique({
+        where: { id: pendingBefore[0]?.id ?? '' }
+      });
+      assert.equal(row?.status, 'PUBLISHED');
+    } finally {
+      await disconnectProducer().catch(() => undefined);
+      if (prisma) {
+        await prisma.$disconnect();
+      }
+      await dropSchema(admin, schema);
+      await admin.$disconnect();
+    }
+  }
+);
