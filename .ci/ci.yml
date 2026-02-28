@@ -45,7 +45,7 @@ deploy:
           SECRET_NAME: svc-media-dev-secrets
           DATABASE_URL:
             vaultPath: kv/data/apps/dev
-            vaultField: DATABASE_URL
+            vaultField: MEDIA_DATABASE_URL
           SPLUNK_HEC_TOKEN:
             vaultPath: kv/data/apps/dev
             vaultField: SPLUNK_HEC_TOKEN
@@ -81,7 +81,7 @@ deploy:
           SECRET_NAME: svc-media-stg-secrets
           DATABASE_URL:
             vaultPath: kv/data/apps/stg
-            vaultField: DATABASE_URL
+            vaultField: MEDIA_DATABASE_URL
           SPLUNK_HEC_TOKEN:
             vaultPath: kv/data/apps/stg
             vaultField: SPLUNK_HEC_TOKEN
@@ -121,7 +121,7 @@ deploy:
           SECRET_NAME: svc-media-secrets
           DATABASE_URL:
             vaultPath: kv/data/apps/prd
-            vaultField: DATABASE_URL
+            vaultField: MEDIA_DATABASE_URL
           SPLUNK_HEC_TOKEN:
             vaultPath: kv/data/apps/prd
             vaultField: SPLUNK_HEC_TOKEN
