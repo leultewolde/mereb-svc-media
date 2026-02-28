@@ -8,7 +8,7 @@ import {
   SharedMediaUrlSignerAdapter,
   SharedUploadKeyGeneratorAdapter
 } from '../adapters/outbound/media/shared-media-signers.js';
-import { createMediaEventPublisherAdapter } from '../adapters/outbound/events/media-event-publisher.js';
+import { PrismaMediaTransactionRunner } from '../adapters/outbound/prisma/media-prisma-asset-repository.js';
 
 export interface MediaContainer {
   media: MediaApplicationModule;
@@ -19,7 +19,7 @@ export function createContainer(): MediaContainer {
   const uploadUrlSigner = new S3UploadUrlSignerAdapter();
   const mediaUrlSigner = new SharedMediaUrlSignerAdapter();
   const uploadKeyGenerator = new SharedUploadKeyGeneratorAdapter();
-  const eventPublisher = createMediaEventPublisherAdapter();
+  const transactionRunner = new PrismaMediaTransactionRunner();
 
   return {
     media: createMediaApplicationModule({
@@ -27,7 +27,7 @@ export function createContainer(): MediaContainer {
       uploadKeyGenerator,
       uploadUrlSigner,
       mediaUrlSigner,
-      eventPublisher
+      transactionRunner
     })
   };
 }

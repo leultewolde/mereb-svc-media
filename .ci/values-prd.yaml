@@ -55,6 +55,10 @@ configMap:
   nameOverride: svc-media-prd-config
   data:
     PORT: "4003"
+    MEDIA_EVENTS_ENABLED: "true"
+    KAFKA_BROKERS: platform-prd-redpanda-0.platform-prd-redpanda.platform-prd.svc.cluster.local:9092,platform-prd-redpanda-1.platform-prd-redpanda.platform-prd.svc.cluster.local:9092,platform-prd-redpanda-2.platform-prd-redpanda.platform-prd.svc.cluster.local:9092
+    KAFKA_SSL: "true"
+    KAFKA_SSL_INSECURE: "true"
     OIDC_ISSUER: https://auth.mereb.app/realms/mereb
     OIDC_AUDIENCE: mereb
     S3_ENDPOINT: http://platform-prd-minio.platform-prd.svc.cluster.local:9000

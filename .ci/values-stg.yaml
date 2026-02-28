@@ -55,6 +55,10 @@ configMap:
   nameOverride: svc-media-stg-config
   data:
     PORT: "4003"
+    MEDIA_EVENTS_ENABLED: "true"
+    KAFKA_BROKERS: platform-stg-redpanda-0.platform-stg-redpanda.platform-stg.svc.cluster.local:9092
+    KAFKA_SSL: "true"
+    KAFKA_SSL_INSECURE: "true"
     OIDC_ISSUER: https://auth.mereb.app/realms/mereb
     OIDC_AUDIENCE: mereb-stg
     S3_ENDPOINT: http://platform-stg-minio.platform-stg.svc.cluster.local:9000

@@ -6,6 +6,15 @@ export interface MediaAssetRepositoryPort {
   findAssetById(id: string): Promise<MediaAssetRecord | null>;
 }
 
+export interface MediaMutationPorts {
+  assets: MediaAssetRepositoryPort;
+  eventPublisher: MediaEventPublisherPort;
+}
+
+export interface MediaTransactionPort {
+  run<T>(callback: (ports: MediaMutationPorts) => Promise<T>): Promise<T>;
+}
+
 export interface UploadKeyGeneratorPort {
   createUploadKey(ownerId: string, filename: string): string;
 }

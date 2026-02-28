@@ -10,7 +10,7 @@ import {
 import type { MediaExecutionContext } from './context.js';
 import type {
   MediaAssetRepositoryPort,
-  MediaEventPublisherPort,
+  MediaTransactionPort,
   MediaUrlSignerPort,
   UploadKeyGeneratorPort,
   UploadUrlSignerPort
@@ -54,7 +54,7 @@ interface MediaUseCaseDeps {
   uploadKeyGenerator: UploadKeyGeneratorPort;
   uploadUrlSigner: UploadUrlSignerPort;
   mediaUrlSigner: MediaUrlSignerPort;
-  eventPublisher: MediaEventPublisherPort;
+  transactionRunner: MediaTransactionPort;
 }
 
 function toAssetResponse(
@@ -84,20 +84,28 @@ export class RequestUploadUseCase {
     const ownerId = requireAuthenticatedUser(ctx);
     const key = this.deps.uploadKeyGenerator.createUploadKey(ownerId, input.filename);
     const putUrl = await this.deps.uploadUrlSigner.createPutUrl(key, input.contentType);
+    const asset = await this.deps.transactionRunner.run(async ({ assets, eventPublisher }) => {
+      const created = await assets.createPendingAsset({
+        ownerId,
+        kind: defaultMediaKind(input.kind),
+        s3Key: key
+      });
 
-    const asset = await this.deps.assets.createPendingAsset({
-      ownerId,
-      kind: defaultMediaKind(input.kind),
-      s3Key: key
-    });
+      const domainEvent = mediaUploadRequestedEvent(
+        created.id,
+        ownerId,
+        created.kind,
+        created.s3Key
+      );
+      await eventPublisher.publishUploadRequested({
+        assetId: domainEvent.payload.assetId,
+        ownerId: domainEvent.payload.ownerId,
+        kind: domainEvent.payload.kind,
+        s3Key: domainEvent.payload.s3Key,
+        occurredAt: domainEvent.occurredAt
+      });
 
-    const domainEvent = mediaUploadRequestedEvent(asset.id, ownerId, asset.kind, asset.s3Key);
-    await this.deps.eventPublisher.publishUploadRequested({
-      assetId: domainEvent.payload.assetId,
-      ownerId: domainEvent.payload.ownerId,
-      kind: domainEvent.payload.kind,
-      s3Key: domainEvent.payload.s3Key,
-      occurredAt: domainEvent.occurredAt
+      return created;
     });
 
     return {
@@ -116,20 +124,22 @@ export class CompleteUploadUseCase {
     ctx: MediaExecutionContext
   ): Promise<{ assetId: string; status: string; getUrl: string }> {
     requireAuthenticatedUser(ctx);
-
-    const asset = await this.deps.assets.markAssetReady(input.assetId);
-    const domainEvent = mediaAssetMarkedReadyEvent(
-      asset.id,
-      asset.ownerId,
-      asset.status,
-      asset.s3Key
-    );
-    await this.deps.eventPublisher.publishAssetReady({
-      assetId: domainEvent.payload.assetId,
-      ownerId: domainEvent.payload.ownerId,
-      status: domainEvent.payload.status,
-      s3Key: domainEvent.payload.s3Key,
-      occurredAt: domainEvent.occurredAt
+    const asset = await this.deps.transactionRunner.run(async ({ assets, eventPublisher }) => {
+      const updated = await assets.markAssetReady(input.assetId);
+      const domainEvent = mediaAssetMarkedReadyEvent(
+        updated.id,
+        updated.ownerId,
+        updated.status,
+        updated.s3Key
+      );
+      await eventPublisher.publishAssetReady({
+        assetId: domainEvent.payload.assetId,
+        ownerId: domainEvent.payload.ownerId,
+        status: domainEvent.payload.status,
+        s3Key: domainEvent.payload.s3Key,
+        occurredAt: domainEvent.occurredAt
+      });
+      return updated;
     });
 
     return {

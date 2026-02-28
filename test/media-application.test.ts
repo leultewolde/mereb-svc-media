@@ -4,6 +4,7 @@ import { createMediaApplicationModule } from '../src/application/media/use-cases
 import type {
   MediaAssetRepositoryPort,
   MediaEventPublisherPort,
+  MediaTransactionPort,
   MediaUrlSignerPort,
   UploadKeyGeneratorPort,
   UploadUrlSignerPort
@@ -22,6 +23,17 @@ function mediaAsset(overrides: Partial<MediaAssetRecord> = {}): MediaAssetRecord
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     ...overrides
+  };
+}
+
+function transactionRunner(
+  assets: MediaAssetRepositoryPort,
+  eventPublisher: MediaEventPublisherPort
+): MediaTransactionPort {
+  return {
+    async run<T>(callback): Promise<T> {
+      return callback({ assets, eventPublisher });
+    }
   };
 }
 
@@ -75,7 +87,7 @@ test('requestUpload creates asset and returns signed URLs', async () => {
     uploadKeyGenerator,
     uploadUrlSigner,
     mediaUrlSigner,
-    eventPublisher
+    transactionRunner: transactionRunner(assets, eventPublisher)
   });
 
   const response = await media.commands.requestUpload.execute(
@@ -102,29 +114,32 @@ test('requestUpload creates asset and returns signed URLs', async () => {
 });
 
 test('requestUpload requires authentication', async () => {
-  const media = createMediaApplicationModule({
-    assets: {
-      async createPendingAsset() {
-        throw new Error('not used');
-      },
-      async markAssetReady() {
-        throw new Error('not used');
-      },
-      async findAssetById() {
-        throw new Error('not used');
-      }
+  const assets: MediaAssetRepositoryPort = {
+    async createPendingAsset() {
+      throw new Error('not used');
     },
+    async markAssetReady() {
+      throw new Error('not used');
+    },
+    async findAssetById() {
+      throw new Error('not used');
+    }
+  };
+  const eventPublisher: MediaEventPublisherPort = {
+    async publishUploadRequested() {
+      return;
+    },
+    async publishAssetReady() {
+      return;
+    }
+  };
+
+  const media = createMediaApplicationModule({
+    assets,
     uploadKeyGenerator: { createUploadKey: () => 'unused' },
     uploadUrlSigner: { async createPutUrl() { return 'unused'; } },
     mediaUrlSigner: { signMediaUrl: () => 'unused' },
-    eventPublisher: {
-      async publishUploadRequested() {
-        return;
-      },
-      async publishAssetReady() {
-        return;
-      }
-    }
+    transactionRunner: transactionRunner(assets, eventPublisher)
   });
 
   await assert.rejects(
@@ -144,19 +159,29 @@ test('completeUpload and getAssetById preserve response shapes', async () => {
   });
   const readyEventCalls: Array<unknown> = [];
 
-  const media = createMediaApplicationModule({
-    assets: {
-      async createPendingAsset() {
-        throw new Error('not used');
-      },
-      async markAssetReady(id) {
-        return { ...readyAsset, id };
-      },
-      async findAssetById(id) {
-        if (id === 'missing') return null;
-        return { ...readyAsset, id };
-      }
+  const assets: MediaAssetRepositoryPort = {
+    async createPendingAsset() {
+      throw new Error('not used');
     },
+    async markAssetReady(id) {
+      return { ...readyAsset, id };
+    },
+    async findAssetById(id) {
+      if (id === 'missing') return null;
+      return { ...readyAsset, id };
+    }
+  };
+  const eventPublisher: MediaEventPublisherPort = {
+    async publishUploadRequested() {
+      return;
+    },
+    async publishAssetReady(input) {
+      readyEventCalls.push(input);
+    }
+  };
+
+  const media = createMediaApplicationModule({
+    assets,
     uploadKeyGenerator: { createUploadKey: () => 'unused' },
     uploadUrlSigner: { async createPutUrl() { return 'unused'; } },
     mediaUrlSigner: {
@@ -164,14 +189,7 @@ test('completeUpload and getAssetById preserve response shapes', async () => {
         return `signed:${key}`;
       }
     },
-    eventPublisher: {
-      async publishUploadRequested() {
-        return;
-      },
-      async publishAssetReady(input) {
-        readyEventCalls.push(input);
-      }
-    }
+    transactionRunner: transactionRunner(assets, eventPublisher)
   });
 
   const complete = await media.commands.completeUpload.execute(
