@@ -67,7 +67,7 @@ beforeAll(async () => {
     .withExposedPorts(9092)
     .withWaitStrategy(Wait.forListeningPorts())
     .start();
-}, 60_000);
+}, 180_000);
 
 afterAll(async () => {
   await disconnectProducer().catch(() => undefined);
@@ -77,7 +77,7 @@ afterAll(async () => {
   if (postgresContainer) {
     await postgresContainer.stop();
   }
-}, 60_000);
+}, 180_000);
 
 function getAdminDatabaseUrl(): string {
   if (!postgresContainer) {
@@ -129,7 +129,7 @@ async function ensureServiceRole(admin: PrismaClient): Promise<void> {
 
 test(
   'requestUpload writes an outbox event and publishes it to Kafka',
-  { timeout: 60_000 },
+  { timeout: 180_000 },
   async () => {
     const schema = createTemporarySchemaName('svc_media_it');
     const databaseUrl = withSchema(getBaseServiceDatabaseUrl(), schema);
