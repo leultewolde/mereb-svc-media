@@ -178,6 +178,7 @@ deploy:
     valuesFiles:
       - .ci/values-prd.yaml
       - .ci/values-outbox-worker.yaml
+      - .ci/values-prd-outbox-worker.yaml
     notes: "Dedicated outbox relay worker deployment"
 
 signing:
