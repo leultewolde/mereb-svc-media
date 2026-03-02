@@ -18,6 +18,16 @@ image:
       value: http/protobuf
     - name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
       value: http/protobuf
+    - name: OIDC_ISSUER
+      valueFrom:
+        configMapKeyRef:
+          name: platform-identity-stg
+          key: OIDC_ISSUER
+    - name: OIDC_AUDIENCE
+      valueFrom:
+        configMapKeyRef:
+          name: platform-identity-stg
+          key: ENV_API_AUDIENCE
   envFrom:
     - configMapRef:
         name: svc-media-stg-config
@@ -59,8 +69,6 @@ configMap:
     KAFKA_BROKERS: platform-stg-redpanda-0.platform-stg-redpanda.platform-stg.svc.cluster.local:9092
     KAFKA_SSL: "true"
     KAFKA_SSL_INSECURE: "true"
-    OIDC_ISSUER: https://auth.mereb.app/realms/mereb
-    OIDC_AUDIENCE: mereb-stg
     S3_ENDPOINT: http://platform-stg-minio.platform-stg.svc.cluster.local:9000
     S3_REGION: us-east-1
     S3_BUCKET: media-stg
