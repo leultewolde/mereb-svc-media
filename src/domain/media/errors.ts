@@ -39,3 +39,10 @@ export class MediaObjectTooLargeError extends Error {
     this.name = 'MediaObjectTooLargeError';
   }
 }
+
+export class MediaStorageUnavailableError extends Error {
+  constructor(message = 'Media storage is unavailable') {
+    super(message);
+    this.name = 'MediaStorageUnavailableError';
+  }
+}

@@ -29,6 +29,19 @@ const typeDefsPath = join(
 );
 const typeDefs = readFileSync(typeDefsPath, 'utf8');
 
+function assertStorageConfig() {
+  const missing: string[] = [];
+  if (!process.env.S3_BUCKET) {
+    missing.push('S3_BUCKET');
+  }
+  if (!process.env.S3_ENDPOINT) {
+    missing.push('S3_ENDPOINT');
+  }
+  if (missing.length > 0) {
+    throw new Error(`Missing required media storage env vars: ${missing.join(', ')}`);
+  }
+}
+
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: createFastifyLoggerOptions('svc-media')
@@ -44,6 +57,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   if (!issuer) {
     throw new Error('OIDC_ISSUER env var required');
   }
+  assertStorageConfig();
 
   app.addHook('onRequest', async (request) => {
     const token = parseAuthHeader(request.headers);

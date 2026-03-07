@@ -31,6 +31,8 @@ Typical upload flow:
 - policy is enforced:
   - before issuing presigned URL
   - again at completion by inspecting uploaded object metadata
+- completion performs a short bounded retry for object visibility to handle eventual consistency.
+- storage connectivity/config errors are surfaced as `MEDIA_STORAGE_UNAVAILABLE`.
 
 ## Environment
 
@@ -49,6 +51,8 @@ Typical upload flow:
 | `UPLOAD_URL_EXPIRATION_SECONDS` | no | `900` | Presigned URL expiry. |
 | `PORT` | no | `4003` | HTTP listen port. |
 | `HOST` | no | `0.0.0.0` | HTTP listen host. |
+
+Startup validates required storage env vars and fails fast if `S3_BUCKET` or `S3_ENDPOINT` are missing.
 
 ## Local development
 

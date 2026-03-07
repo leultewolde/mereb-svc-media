@@ -3,6 +3,7 @@ import {
   MediaAssetNotFoundError,
   MediaAssetOwnershipError,
   MediaObjectNotFoundError,
+  MediaStorageUnavailableError,
   UnsupportedMediaContentTypeError
 } from '../../domain/media/errors.js';
 import {
@@ -28,6 +29,8 @@ import type {
 } from './ports.js';
 
 export const DEFAULT_UPLOAD_URL_EXPIRATION_SECONDS = 900;
+const DEFAULT_UPLOAD_INSPECTION_RETRIES = 3;
+const DEFAULT_UPLOAD_INSPECTION_RETRY_DELAY_MS = 150;
 
 function requireAuthenticatedUser(ctx: MediaExecutionContext): string {
   const userId = ctx.principal?.userId;
@@ -93,6 +96,10 @@ function toAssetResponse(
   };
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class RequestUploadUseCase {
   constructor(private readonly deps: MediaUseCaseDeps) {}
 
@@ -107,7 +114,14 @@ export class RequestUploadUseCase {
     const ownerId = requireAuthenticatedUser(ctx);
     const normalizedContentType = assertAllowedContentType(input.contentType);
     const key = this.deps.uploadKeyGenerator.createUploadKey(ownerId, input.filename);
-    const putUrl = await this.deps.uploadUrlSigner.createPutUrl(key, normalizedContentType);
+    let putUrl: string;
+    try {
+      putUrl = await this.deps.uploadUrlSigner.createPutUrl(key, normalizedContentType);
+    } catch (error) {
+      throw new MediaStorageUnavailableError(
+        `Failed to create upload URL: ${error instanceof Error ? error.message : 'unknown error'}`
+      );
+    }
     const asset = await this.deps.transactionRunner.run(async ({ assets, eventPublisher }) => {
       const created = await assets.createPendingAsset({
         ownerId,
@@ -146,6 +160,32 @@ export class RequestUploadUseCase {
 export class CompleteUploadUseCase {
   constructor(private readonly deps: MediaUseCaseDeps) {}
 
+  private async inspectUploadedObjectWithRetry(s3Key: string) {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= DEFAULT_UPLOAD_INSPECTION_RETRIES; attempt += 1) {
+      try {
+        const uploadedObject = await this.deps.uploadedObjectInspector.inspectUploadedObject(s3Key);
+        if (uploadedObject) {
+          return uploadedObject;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+
+      if (attempt < DEFAULT_UPLOAD_INSPECTION_RETRIES) {
+        await wait(DEFAULT_UPLOAD_INSPECTION_RETRY_DELAY_MS);
+      }
+    }
+
+    if (lastError) {
+      throw new MediaStorageUnavailableError(
+        `Failed to inspect uploaded object: ${lastError instanceof Error ? lastError.message : 'unknown error'}`
+      );
+    }
+
+    return null;
+  }
+
   async execute(
     input: { assetId: string },
     ctx: MediaExecutionContext
@@ -159,7 +199,7 @@ export class CompleteUploadUseCase {
       throw new MediaAssetOwnershipError();
     }
 
-    const uploadedObject = await this.deps.uploadedObjectInspector.inspectUploadedObject(existing.s3Key);
+    const uploadedObject = await this.inspectUploadedObjectWithRetry(existing.s3Key);
     if (!uploadedObject) {
       throw new MediaObjectNotFoundError();
     }

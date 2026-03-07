@@ -7,6 +7,7 @@ import {
   MediaAssetNotFoundError,
   MediaAssetOwnershipError,
   MediaObjectNotFoundError,
+  MediaStorageUnavailableError,
   MediaObjectTooLargeError,
   UnsupportedMediaContentTypeError
 } from '../../../domain/media/errors.js';
@@ -75,6 +76,9 @@ function toGraphQLError(error: unknown): never {
   if (error instanceof MediaObjectNotFoundError) {
     throw new Error('MEDIA_OBJECT_NOT_FOUND');
   }
+  if (error instanceof MediaStorageUnavailableError) {
+    throw new Error('MEDIA_STORAGE_UNAVAILABLE');
+  }
   throw error;
 }
 
@@ -139,6 +143,13 @@ export function createResolvers(
             media.helpers.toExecutionContext(ctx.userId)
           );
         } catch (error) {
+          console.warn('[svc-media] requestMediaUpload failed', {
+            userId: ctx.userId,
+            filename: args.filename,
+            contentType: args.contentType,
+            kind: args.kind,
+            error: error instanceof Error ? error.message : String(error)
+          });
           toGraphQLError(error);
         }
       },
@@ -153,6 +164,11 @@ export function createResolvers(
             media.helpers.toExecutionContext(ctx.userId)
           );
         } catch (error) {
+          console.warn('[svc-media] completeMediaUpload failed', {
+            userId: ctx.userId,
+            assetId: args.assetId,
+            error: error instanceof Error ? error.message : String(error)
+          });
           toGraphQLError(error);
         }
       }
