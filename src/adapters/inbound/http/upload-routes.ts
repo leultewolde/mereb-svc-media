@@ -1,6 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { MediaExecutionContext } from '../../../application/media/context.js';
-import { AuthenticationRequiredError } from '../../../domain/media/errors.js';
+import {
+  AuthenticationRequiredError,
+  MediaAssetNotFoundError,
+  MediaAssetOwnershipError,
+  MediaObjectNotFoundError,
+  MediaObjectTooLargeError,
+  UnsupportedMediaContentTypeError
+} from '../../../domain/media/errors.js';
 
 export interface UploadRoutesDeps {
   requestUpload: {
@@ -8,22 +15,38 @@ export interface UploadRoutesDeps {
       kind?: string;
       filename: string;
       contentType: string;
-    }, ctx: MediaExecutionContext): Promise<{ assetId: string; putUrl: string; getUrl: string }>;
+    }, ctx: MediaExecutionContext): Promise<{
+      assetId: string;
+      key: string;
+      putUrl: string;
+      getUrl: string;
+      expiresInSeconds: number;
+    }>;
   };
   completeUpload: {
     execute(input: { assetId: string }, ctx: MediaExecutionContext): Promise<{
       assetId: string;
+      key: string;
+      ownerId: string;
+      kind: string;
       status: string;
-      getUrl: string;
+      variants: unknown;
+      url: string;
+      createdAt: string;
+      updatedAt: string;
     }>;
   };
   getAssetById: {
     execute(input: { assetId: string }): Promise<{
       assetId: string;
+      key: string;
       ownerId: string;
+      kind: string;
       status: string;
       variants: unknown;
       url: string;
+      createdAt: string;
+      updatedAt: string;
     } | null>;
   };
   toExecutionContext: (userId?: string) => MediaExecutionContext;
@@ -57,6 +80,9 @@ export async function registerUploadRoutes(
       if (error instanceof AuthenticationRequiredError) {
         return reply.status(401).send({ error: error.message });
       }
+      if (error instanceof UnsupportedMediaContentTypeError) {
+        return reply.status(415).send({ error: error.message });
+      }
       throw error;
     }
   });
@@ -72,6 +98,21 @@ export async function registerUploadRoutes(
     } catch (error) {
       if (error instanceof AuthenticationRequiredError) {
         return reply.status(401).send({ error: error.message });
+      }
+      if (error instanceof MediaAssetNotFoundError) {
+        return reply.status(404).send({ error: error.message });
+      }
+      if (error instanceof MediaAssetOwnershipError) {
+        return reply.status(403).send({ error: error.message });
+      }
+      if (error instanceof MediaObjectNotFoundError) {
+        return reply.status(409).send({ error: error.message });
+      }
+      if (
+        error instanceof MediaObjectTooLargeError ||
+        error instanceof UnsupportedMediaContentTypeError
+      ) {
+        return reply.status(422).send({ error: error.message });
       }
       throw error;
     }

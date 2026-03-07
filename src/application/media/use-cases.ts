@@ -1,4 +1,10 @@
-import { AuthenticationRequiredError } from '../../domain/media/errors.js';
+import {
+  AuthenticationRequiredError,
+  MediaAssetNotFoundError,
+  MediaAssetOwnershipError,
+  MediaObjectNotFoundError,
+  UnsupportedMediaContentTypeError
+} from '../../domain/media/errors.js';
 import {
   mediaAssetMarkedReadyEvent,
   mediaUploadRequestedEvent
@@ -7,14 +13,21 @@ import {
   defaultMediaKind,
   type MediaAssetRecord
 } from '../../domain/media/asset.js';
+import {
+  assertAllowedContentType,
+  assertAllowedObjectSize
+} from '../../domain/media/upload-policy.js';
 import type { MediaExecutionContext } from './context.js';
 import type {
   MediaAssetRepositoryPort,
   MediaTransactionPort,
   MediaUrlSignerPort,
+  UploadedObjectInspectorPort,
   UploadKeyGeneratorPort,
   UploadUrlSignerPort
 } from './ports.js';
+
+export const DEFAULT_UPLOAD_URL_EXPIRATION_SECONDS = 900;
 
 function requireAuthenticatedUser(ctx: MediaExecutionContext): string {
   const userId = ctx.principal?.userId;
@@ -30,10 +43,14 @@ function toExecutionContext(userId?: string): MediaExecutionContext {
 
 export interface MediaAssetResponse {
   assetId: string;
+  key: string;
   ownerId: string;
+  kind: string;
   status: string;
   variants: unknown;
   url: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MediaApplicationModule {
@@ -53,8 +70,10 @@ interface MediaUseCaseDeps {
   assets: MediaAssetRepositoryPort;
   uploadKeyGenerator: UploadKeyGeneratorPort;
   uploadUrlSigner: UploadUrlSignerPort;
+  uploadedObjectInspector: UploadedObjectInspectorPort;
   mediaUrlSigner: MediaUrlSignerPort;
   transactionRunner: MediaTransactionPort;
+  uploadUrlExpirationSeconds?: number;
 }
 
 function toAssetResponse(
@@ -63,10 +82,14 @@ function toAssetResponse(
 ): MediaAssetResponse {
   return {
     assetId: asset.id,
+    key: asset.s3Key,
     ownerId: asset.ownerId,
+    kind: asset.kind,
     status: asset.status,
     variants: asset.variants ?? [],
-    url: mediaUrlSigner.signMediaUrl(asset.s3Key)
+    url: mediaUrlSigner.signMediaUrl(asset.s3Key),
+    createdAt: asset.createdAt.toISOString(),
+    updatedAt: asset.updatedAt.toISOString()
   };
 }
 
@@ -80,10 +103,11 @@ export class RequestUploadUseCase {
       kind?: string;
     },
     ctx: MediaExecutionContext
-  ): Promise<{ assetId: string; putUrl: string; getUrl: string }> {
+  ): Promise<{ assetId: string; key: string; putUrl: string; getUrl: string; expiresInSeconds: number }> {
     const ownerId = requireAuthenticatedUser(ctx);
+    const normalizedContentType = assertAllowedContentType(input.contentType);
     const key = this.deps.uploadKeyGenerator.createUploadKey(ownerId, input.filename);
-    const putUrl = await this.deps.uploadUrlSigner.createPutUrl(key, input.contentType);
+    const putUrl = await this.deps.uploadUrlSigner.createPutUrl(key, normalizedContentType);
     const asset = await this.deps.transactionRunner.run(async ({ assets, eventPublisher }) => {
       const created = await assets.createPendingAsset({
         ownerId,
@@ -110,8 +134,11 @@ export class RequestUploadUseCase {
 
     return {
       assetId: asset.id,
+      key,
       putUrl,
-      getUrl: this.deps.mediaUrlSigner.signMediaUrl(key)
+      getUrl: this.deps.mediaUrlSigner.signMediaUrl(key),
+      expiresInSeconds:
+        this.deps.uploadUrlExpirationSeconds ?? DEFAULT_UPLOAD_URL_EXPIRATION_SECONDS
     };
   }
 }
@@ -122,8 +149,28 @@ export class CompleteUploadUseCase {
   async execute(
     input: { assetId: string },
     ctx: MediaExecutionContext
-  ): Promise<{ assetId: string; status: string; getUrl: string }> {
-    requireAuthenticatedUser(ctx);
+  ): Promise<MediaAssetResponse> {
+    const userId = requireAuthenticatedUser(ctx);
+    const existing = await this.deps.assets.findAssetById(input.assetId);
+    if (!existing) {
+      throw new MediaAssetNotFoundError();
+    }
+    if (existing.ownerId !== userId) {
+      throw new MediaAssetOwnershipError();
+    }
+
+    const uploadedObject = await this.deps.uploadedObjectInspector.inspectUploadedObject(existing.s3Key);
+    if (!uploadedObject) {
+      throw new MediaObjectNotFoundError();
+    }
+
+    const uploadedContentType = uploadedObject.contentType?.trim();
+    if (!uploadedContentType) {
+      throw new UnsupportedMediaContentTypeError('missing');
+    }
+    assertAllowedContentType(uploadedContentType);
+    assertAllowedObjectSize(uploadedObject.contentLength);
+
     const asset = await this.deps.transactionRunner.run(async ({ assets, eventPublisher }) => {
       const updated = await assets.markAssetReady(input.assetId);
       const domainEvent = mediaAssetMarkedReadyEvent(
@@ -142,11 +189,7 @@ export class CompleteUploadUseCase {
       return updated;
     });
 
-    return {
-      assetId: asset.id,
-      status: asset.status,
-      getUrl: this.deps.mediaUrlSigner.signMediaUrl(asset.s3Key)
-    };
+    return toAssetResponse(asset, this.deps.mediaUrlSigner);
   }
 }
 

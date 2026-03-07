@@ -3,16 +3,31 @@ import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import multipart from '@fastify/multipart';
+import mercurius, { type MercuriusOptions } from 'mercurius';
+import { makeExecutableSchema } from '@graphql-tools/schema';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   createFastifyLoggerOptions,
   loadEnv,
   parseAuthHeader,
   verifyJwt
 } from '@mereb/shared-packages';
+import type { GraphQLContext } from '../context.js';
+import { createResolvers } from '../adapters/inbound/graphql/resolvers.js';
 import { registerUploadRoutes } from '../adapters/inbound/http/upload-routes.js';
 import { createContainer } from './container.js';
 
 loadEnv();
+
+const typeDefsPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'schema.graphql'
+);
+const typeDefs = readFileSync(typeDefsPath, 'utf8');
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -46,6 +61,20 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   const container = createContainer();
+
+  const schema = makeExecutableSchema<GraphQLContext>({
+    typeDefs,
+    resolvers: createResolvers(container.media)
+  });
+
+  const mercuriusOptions: MercuriusOptions & { federationMetadata?: boolean } = {
+    schema,
+    graphiql: process.env.NODE_ENV !== 'production',
+    federationMetadata: true,
+    context: (request): GraphQLContext => ({ userId: request.userId })
+  };
+
+  await app.register(mercurius, mercuriusOptions);
 
   await registerUploadRoutes(app, {
     requestUpload: container.media.commands.requestUpload,

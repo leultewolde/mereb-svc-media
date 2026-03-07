@@ -1,0 +1,56 @@
+scalar FieldSet
+
+directive @external on FIELD_DEFINITION
+directive @provides(fields: FieldSet) on FIELD_DEFINITION
+directive @key(fields: FieldSet) repeatable on OBJECT | INTERFACE
+directive @extends on OBJECT | INTERFACE
+
+scalar _Any
+
+type _Service {
+  sdl: String
+}
+
+type MediaUploadRequest {
+  assetId: ID!
+  key: String!
+  putUrl: String!
+  getUrl: String!
+  expiresInSeconds: Int!
+}
+
+type MediaAsset @key(fields: "id") {
+  id: ID!
+  ownerId: ID!
+  key: String!
+  kind: String!
+  status: String!
+  url: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+enum MediaUploadKind {
+  AVATAR
+  POST_IMAGE
+}
+
+union _Entity = MediaAsset
+
+type Query {
+  mediaAsset(assetId: ID!): MediaAsset
+}
+
+type Mutation {
+  requestMediaUpload(
+    filename: String!
+    contentType: String!
+    kind: MediaUploadKind!
+  ): MediaUploadRequest!
+  completeMediaUpload(assetId: ID!): MediaAsset!
+}
+
+extend type Query {
+  _entities(representations: [_Any!]!): [_Entity]!
+  _service: _Service!
+}

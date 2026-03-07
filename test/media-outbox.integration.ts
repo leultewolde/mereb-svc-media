@@ -171,6 +171,11 @@ test(
             return `put:${key}:${contentType}`;
           }
         },
+        uploadedObjectInspector: {
+          async inspectUploadedObject() {
+            return null;
+          }
+        },
         mediaUrlSigner: {
           signMediaUrl(key) {
             return `get:${key}`;

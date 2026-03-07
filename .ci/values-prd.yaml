@@ -76,6 +76,7 @@ configMap:
     KAFKA_SSL: "true"
     KAFKA_SSL_INSECURE: "true"
     S3_ENDPOINT: http://platform-prd-minio.platform-prd.svc.cluster.local:9000
+    S3_PRESIGN_ENDPOINT: http://platform-prd-minio.platform-prd.svc.cluster.local:9000
     S3_REGION: us-east-1
     S3_BUCKET: media
     SPLUNK_HEC_URL: https://splunk-hec.mereb.app/services/collector/event

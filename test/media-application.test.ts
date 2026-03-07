@@ -6,11 +6,16 @@ import type {
   MediaEventPublisherPort,
   MediaTransactionPort,
   MediaUrlSignerPort,
+  UploadedObjectInspectorPort,
   UploadKeyGeneratorPort,
   UploadUrlSignerPort
 } from '../src/application/media/ports.js';
 import type { MediaAssetRecord } from '../src/domain/media/asset.js';
-import { AuthenticationRequiredError } from '../src/domain/media/errors.js';
+import {
+  AuthenticationRequiredError,
+  MediaAssetOwnershipError,
+  UnsupportedMediaContentTypeError
+} from '../src/domain/media/errors.js';
 
 function mediaAsset(overrides: Partial<MediaAssetRecord> = {}): MediaAssetRecord {
   return {
@@ -86,8 +91,14 @@ test('requestUpload creates asset and returns signed URLs', async () => {
     assets,
     uploadKeyGenerator,
     uploadUrlSigner,
+    uploadedObjectInspector: {
+      async inspectUploadedObject() {
+        throw new Error('not used');
+      }
+    },
     mediaUrlSigner,
-    transactionRunner: transactionRunner(assets, eventPublisher)
+    transactionRunner: transactionRunner(assets, eventPublisher),
+    uploadUrlExpirationSeconds: 900
   });
 
   const response = await media.commands.requestUpload.execute(
@@ -100,8 +111,10 @@ test('requestUpload creates asset and returns signed URLs', async () => {
 
   assert.deepEqual(response, {
     assetId: 'asset-1',
+    key: 'uploads/user-1/avatar.png',
     putUrl: 'put:uploads/user-1/avatar.png:image/png',
-    getUrl: 'get:uploads/user-1/avatar.png'
+    getUrl: 'get:uploads/user-1/avatar.png',
+    expiresInSeconds: 900
   });
   assert.deepEqual(createCalls, [
     {
@@ -138,6 +151,11 @@ test('requestUpload requires authentication', async () => {
     assets,
     uploadKeyGenerator: { createUploadKey: () => 'unused' },
     uploadUrlSigner: { async createPutUrl() { return 'unused'; } },
+    uploadedObjectInspector: {
+      async inspectUploadedObject() {
+        return null;
+      }
+    },
     mediaUrlSigner: { signMediaUrl: () => 'unused' },
     transactionRunner: transactionRunner(assets, eventPublisher)
   });
@@ -149,6 +167,50 @@ test('requestUpload requires authentication', async () => {
         media.helpers.toExecutionContext(undefined)
       ),
     AuthenticationRequiredError
+  );
+});
+
+test('requestUpload rejects unsupported content types', async () => {
+  const assets: MediaAssetRepositoryPort = {
+    async createPendingAsset() {
+      throw new Error('not used');
+    },
+    async markAssetReady() {
+      throw new Error('not used');
+    },
+    async findAssetById() {
+      throw new Error('not used');
+    }
+  };
+  const eventPublisher: MediaEventPublisherPort = {
+    async publishUploadRequested() {
+      return;
+    },
+    async publishAssetReady() {
+      return;
+    }
+  };
+
+  const media = createMediaApplicationModule({
+    assets,
+    uploadKeyGenerator: { createUploadKey: () => 'unused' },
+    uploadUrlSigner: { async createPutUrl() { return 'unused'; } },
+    uploadedObjectInspector: {
+      async inspectUploadedObject() {
+        return null;
+      }
+    },
+    mediaUrlSigner: { signMediaUrl: () => 'unused' },
+    transactionRunner: transactionRunner(assets, eventPublisher)
+  });
+
+  await assert.rejects(
+    () =>
+      media.commands.requestUpload.execute(
+        { filename: 'avatar.gif', contentType: 'image/gif' },
+        media.helpers.toExecutionContext('user-1')
+      ),
+    UnsupportedMediaContentTypeError
   );
 });
 
@@ -184,6 +246,14 @@ test('completeUpload and getAssetById preserve response shapes', async () => {
     assets,
     uploadKeyGenerator: { createUploadKey: () => 'unused' },
     uploadUrlSigner: { async createPutUrl() { return 'unused'; } },
+    uploadedObjectInspector: {
+      async inspectUploadedObject() {
+        return {
+          contentType: 'image/png',
+          contentLength: 1024
+        };
+      }
+    } satisfies UploadedObjectInspectorPort,
     mediaUrlSigner: {
       signMediaUrl(key) {
         return `signed:${key}`;
@@ -198,20 +268,76 @@ test('completeUpload and getAssetById preserve response shapes', async () => {
   );
   assert.deepEqual(complete, {
     assetId: 'asset-2',
+    key: 'uploads/user-1/avatar.png',
+    ownerId: 'user-1',
+    kind: 'image',
     status: 'ready',
-    getUrl: 'signed:uploads/user-1/avatar.png'
+    variants: [{ name: 'thumb' }],
+    url: 'signed:uploads/user-1/avatar.png',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z'
   });
   assert.equal(readyEventCalls.length, 1);
 
   const found = await media.queries.getAssetById.execute({ assetId: 'asset-2' });
   assert.deepEqual(found, {
     assetId: 'asset-2',
+    key: 'uploads/user-1/avatar.png',
     ownerId: 'user-1',
+    kind: 'image',
     status: 'ready',
     variants: [{ name: 'thumb' }],
-    url: 'signed:uploads/user-1/avatar.png'
+    url: 'signed:uploads/user-1/avatar.png',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z'
   });
 
   const missing = await media.queries.getAssetById.execute({ assetId: 'missing' });
   assert.equal(missing, null);
+});
+
+test('completeUpload rejects assets owned by another user', async () => {
+  const assets: MediaAssetRepositoryPort = {
+    async createPendingAsset() {
+      throw new Error('not used');
+    },
+    async markAssetReady() {
+      throw new Error('not used');
+    },
+    async findAssetById() {
+      return mediaAsset({ ownerId: 'user-2' });
+    }
+  };
+  const eventPublisher: MediaEventPublisherPort = {
+    async publishUploadRequested() {
+      return;
+    },
+    async publishAssetReady() {
+      return;
+    }
+  };
+
+  const media = createMediaApplicationModule({
+    assets,
+    uploadKeyGenerator: { createUploadKey: () => 'unused' },
+    uploadUrlSigner: { async createPutUrl() { return 'unused'; } },
+    uploadedObjectInspector: {
+      async inspectUploadedObject() {
+        return {
+          contentType: 'image/png',
+          contentLength: 100
+        };
+      }
+    },
+    mediaUrlSigner: { signMediaUrl: () => 'unused' },
+    transactionRunner: transactionRunner(assets, eventPublisher)
+  });
+
+  await assert.rejects(
+    () => media.commands.completeUpload.execute(
+      { assetId: 'asset-1' },
+      media.helpers.toExecutionContext('user-1')
+    ),
+    MediaAssetOwnershipError
+  );
 });

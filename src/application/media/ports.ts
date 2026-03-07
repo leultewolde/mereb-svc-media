@@ -23,6 +23,13 @@ export interface UploadUrlSignerPort {
   createPutUrl(key: string, contentType: string): Promise<string>;
 }
 
+export interface UploadedObjectInspectorPort {
+  inspectUploadedObject(key: string): Promise<{
+    contentType?: string;
+    contentLength?: number;
+  } | null>;
+}
+
 export interface MediaUrlSignerPort {
   signMediaUrl(key: string): string;
 }
