@@ -62,6 +62,12 @@ deploy:
           DATABASE_URL:
             vaultPath: kv/data/apps/dev
             vaultField: MEDIA_DATABASE_URL
+          S3_ACCESS_KEY:
+            vaultPath: kv/data/apps/dev
+            vaultField: S3_ACCESS_KEY
+          S3_SECRET_KEY:
+            vaultPath: kv/data/apps/dev
+            vaultField: S3_SECRET_KEY
           SPLUNK_HEC_TOKEN:
             vaultPath: kv/data/apps/dev
             vaultField: SPLUNK_HEC_TOKEN
@@ -107,6 +113,12 @@ deploy:
           DATABASE_URL:
             vaultPath: kv/data/apps/stg
             vaultField: MEDIA_DATABASE_URL
+          S3_ACCESS_KEY:
+            vaultPath: kv/data/apps/stg
+            vaultField: S3_ACCESS_KEY
+          S3_SECRET_KEY:
+            vaultPath: kv/data/apps/stg
+            vaultField: S3_SECRET_KEY
           SPLUNK_HEC_TOKEN:
             vaultPath: kv/data/apps/stg
             vaultField: SPLUNK_HEC_TOKEN
@@ -152,6 +164,12 @@ deploy:
           DATABASE_URL:
             vaultPath: kv/data/apps/prd
             vaultField: MEDIA_DATABASE_URL
+          S3_ACCESS_KEY:
+            vaultPath: kv/data/apps/prd
+            vaultField: S3_ACCESS_KEY
+          S3_SECRET_KEY:
+            vaultPath: kv/data/apps/prd
+            vaultField: S3_SECRET_KEY
           SPLUNK_HEC_TOKEN:
             vaultPath: kv/data/apps/prd
             vaultField: SPLUNK_HEC_TOKEN

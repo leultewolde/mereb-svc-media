@@ -70,7 +70,7 @@ configMap:
     KAFKA_SSL: "true"
     KAFKA_SSL_INSECURE: "true"
     S3_ENDPOINT: http://platform-dev-minio.platform-dev.svc.cluster.local:9000
-    S3_PRESIGN_ENDPOINT: http://platform-dev-minio.platform-dev.svc.cluster.local:9000
+    S3_PRESIGN_ENDPOINT: https://uploads-dev.mereb.app
     S3_REGION: us-east-1
     S3_BUCKET: media-dev
     SPLUNK_HEC_URL: https://splunk-hec.mereb.app/services/collector/event
