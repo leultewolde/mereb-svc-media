@@ -73,6 +73,7 @@ configMap:
     S3_PRESIGN_ENDPOINT: https://uploads-stg.mereb.app
     S3_REGION: us-east-1
     S3_BUCKET: media-stg
+    MEDIA_CDN_ORIGIN: https://uploads-stg.mereb.app/media-stg
     SPLUNK_HEC_URL: https://splunk-hec.mereb.app/services/collector/event
     SPLUNK_HEC_INDEX: logs-stg
 

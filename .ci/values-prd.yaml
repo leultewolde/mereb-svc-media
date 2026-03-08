@@ -79,6 +79,7 @@ configMap:
     S3_PRESIGN_ENDPOINT: https://uploads.mereb.app
     S3_REGION: us-east-1
     S3_BUCKET: media
+    MEDIA_CDN_ORIGIN: https://uploads.mereb.app/media
     SPLUNK_HEC_URL: https://splunk-hec.mereb.app/services/collector/event
     SPLUNK_HEC_INDEX: logs-prd
 
