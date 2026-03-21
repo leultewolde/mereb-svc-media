@@ -28,6 +28,16 @@ image:
         configMapKeyRef:
           name: platform-identity-dev
           key: ENV_API_AUDIENCE
+    - name: S3_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: platform-identity-dev-secrets
+          key: S3_ACCESS_KEY
+    - name: S3_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: platform-identity-dev-secrets
+          key: S3_SECRET_KEY
   envFrom:
     - configMapRef:
         name: svc-media-dev-config
