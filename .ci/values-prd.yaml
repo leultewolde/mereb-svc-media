@@ -49,7 +49,41 @@ image:
         name: svc-media-prd-config
     - secretRef:
         name: svc-media-secrets
-        optional: true
+        optional: false
+
+vaultSecretsOperator:
+  enabled: true
+  auth:
+    create: true
+    spec:
+      vaultAuthGlobalRef:
+        name: mereb-apps-prd
+        namespace: vault-secrets-operator
+      kubernetes:
+        role: apps-prd-svc-media
+      mount: kubernetes-prd
+  staticSecrets:
+    - name: svc-media-runtime
+      spec:
+        type: kv-v2
+        mount: kv
+        path: apps/prd
+        refreshAfter: 5m
+        destination:
+          name: svc-media-secrets
+          create: true
+          overwrite: true
+          transformation:
+            excludes:
+              - .*
+            templates:
+              DATABASE_URL:
+                text: '{{- get .Secrets "MEDIA_DATABASE_URL" -}}'
+              SPLUNK_HEC_TOKEN:
+                text: '{{- get .Secrets "SPLUNK_HEC_TOKEN" -}}'
+        rolloutRestartTargets:
+          - kind: Deployment
+            name: svc-media
 
 service:
   ports:

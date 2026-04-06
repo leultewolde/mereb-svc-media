@@ -29,6 +29,31 @@ const typeDefsPath = join(
 );
 const typeDefs = readFileSync(typeDefsPath, 'utf8');
 
+function parseIssuerEnv(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+async function verifyJwtWithIssuerFallback(
+  token: string,
+  options: { issuer: string; audience?: string }
+) {
+  const issuers = parseIssuerEnv(options.issuer);
+  let lastError: unknown;
+
+  for (const issuer of issuers) {
+    try {
+      return await verifyJwt(token, { issuer, audience: options.audience });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error('OIDC_ISSUER env var required');
+}
+
 function assertStorageConfig() {
   const missing: string[] = [];
   if (!process.env.S3_BUCKET) {
@@ -66,7 +91,7 @@ export async function buildServer(): Promise<FastifyInstance> {
       return;
     }
     try {
-      const payload = await verifyJwt(token, { issuer, audience });
+      const payload = await verifyJwtWithIssuerFallback(token, { issuer, audience });
       request.userId = payload.sub as string | undefined;
     } catch (error) {
       request.log.debug({ err: error }, 'JWT verification failed');

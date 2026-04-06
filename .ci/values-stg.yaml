@@ -43,7 +43,41 @@ image:
         name: svc-media-stg-config
     - secretRef:
         name: svc-media-stg-secrets
-        optional: true
+        optional: false
+
+vaultSecretsOperator:
+  enabled: true
+  auth:
+    create: true
+    spec:
+      vaultAuthGlobalRef:
+        name: mereb-apps-stg
+        namespace: vault-secrets-operator
+      kubernetes:
+        role: apps-stg-svc-media
+      mount: kubernetes-stg
+  staticSecrets:
+    - name: svc-media-runtime
+      spec:
+        type: kv-v2
+        mount: kv
+        path: apps/stg
+        refreshAfter: 5m
+        destination:
+          name: svc-media-stg-secrets
+          create: true
+          overwrite: true
+          transformation:
+            excludes:
+              - .*
+            templates:
+              DATABASE_URL:
+                text: '{{- get .Secrets "MEDIA_DATABASE_URL" -}}'
+              SPLUNK_HEC_TOKEN:
+                text: '{{- get .Secrets "SPLUNK_HEC_TOKEN" -}}'
+        rolloutRestartTargets:
+          - kind: Deployment
+            name: svc-media-stg
 
 service:
   ports:
