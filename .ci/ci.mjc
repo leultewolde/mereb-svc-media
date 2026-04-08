@@ -46,35 +46,43 @@ deploy:
     - prd
     - prd_outbox
 
-  dev:
-    release: svc-media-dev
-    namespace: apps-dev
+  defaults:
     chart: app-chart
     repo: https://charts.leultewolde.com
     repoCredentialId: helm-chart-creds
+    wait: true
+    atomic: true
+    timeout: 10m
+
+  generatedBaseDefaults:
+    profile: apiService
+    inputs:
+      serviceName: svc-media
+      containerPort: 4003
+      routePrefix: /media
+      secretTemplates:
+        DATABASE_URL: MEDIA_DATABASE_URL
+        SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
+      extraEnv:
+        - name: OIDC_ISSUER
+          fromPlatformIdentityConfigKey: OIDC_ISSUER
+        - name: OIDC_AUDIENCE
+          fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
+        - name: S3_ACCESS_KEY
+          fromPlatformIdentitySecretKey: S3_ACCESS_KEY
+        - name: S3_SECRET_KEY
+          fromPlatformIdentitySecretKey: S3_SECRET_KEY
+
+  dev:
+    release: svc-media-dev
+    namespace: apps-dev
     valuesFiles:
       - .ci/values-dev.yaml
     generatedBaseValues:
-      profile: apiService
       inputs:
-        serviceName: svc-media
-        containerPort: 4003
-        routePrefix: /media
         configMapName: svc-media-dev-config
         secretName: svc-media-dev-secrets
         tlsSecretName: media-dev-tls
-        secretTemplates:
-          DATABASE_URL: MEDIA_DATABASE_URL
-          SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
-        extraEnv:
-          - name: OIDC_ISSUER
-            fromPlatformIdentityConfigKey: OIDC_ISSUER
-          - name: OIDC_AUDIENCE
-            fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
-          - name: S3_ACCESS_KEY
-            fromPlatformIdentitySecretKey: S3_ACCESS_KEY
-          - name: S3_SECRET_KEY
-            fromPlatformIdentitySecretKey: S3_SECRET_KEY
     smoke:
       url: https://api-dev.mereb.app/media/healthz
       retries: 3
@@ -82,34 +90,10 @@ deploy:
       timeout: 60s
 
   dev_outbox:
+    extends: dev
     release: svc-media-dev-outbox
     namespace: apps-dev
-    chart: app-chart
-    repo: https://charts.leultewolde.com
-    repoCredentialId: helm-chart-creds
-    valuesFiles:
-      - .ci/values-dev.yaml
-    generatedBaseValues:
-      profile: apiService
-      inputs:
-        serviceName: svc-media
-        containerPort: 4003
-        routePrefix: /media
-        configMapName: svc-media-dev-config
-        secretName: svc-media-dev-secrets
-        tlsSecretName: media-dev-tls
-        secretTemplates:
-          DATABASE_URL: MEDIA_DATABASE_URL
-          SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
-        extraEnv:
-          - name: OIDC_ISSUER
-            fromPlatformIdentityConfigKey: OIDC_ISSUER
-          - name: OIDC_AUDIENCE
-            fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
-          - name: S3_ACCESS_KEY
-            fromPlatformIdentitySecretKey: S3_ACCESS_KEY
-          - name: S3_SECRET_KEY
-            fromPlatformIdentitySecretKey: S3_SECRET_KEY
+    smoke: false
     generatedValues:
       profile: outboxWorker
       overlay:
@@ -123,32 +107,13 @@ deploy:
   stg:
     release: svc-media-stg
     namespace: apps-stg
-    chart: app-chart
-    repo: https://charts.leultewolde.com
-    repoCredentialId: helm-chart-creds
     valuesFiles:
       - .ci/values-stg.yaml
     generatedBaseValues:
-      profile: apiService
       inputs:
-        serviceName: svc-media
-        containerPort: 4003
-        routePrefix: /media
         configMapName: svc-media-stg-config
         secretName: svc-media-stg-secrets
         tlsSecretName: media-stg-tls
-        secretTemplates:
-          DATABASE_URL: MEDIA_DATABASE_URL
-          SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
-        extraEnv:
-          - name: OIDC_ISSUER
-            fromPlatformIdentityConfigKey: OIDC_ISSUER
-          - name: OIDC_AUDIENCE
-            fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
-          - name: S3_ACCESS_KEY
-            fromPlatformIdentitySecretKey: S3_ACCESS_KEY
-          - name: S3_SECRET_KEY
-            fromPlatformIdentitySecretKey: S3_SECRET_KEY
     smoke:
       url: https://api-stg.mereb.app/media/healthz
       retries: 3
@@ -156,34 +121,10 @@ deploy:
       timeout: 60s
 
   stg_outbox:
+    extends: stg
     release: svc-media-stg-outbox
     namespace: apps-stg
-    chart: app-chart
-    repo: https://charts.leultewolde.com
-    repoCredentialId: helm-chart-creds
-    valuesFiles:
-      - .ci/values-stg.yaml
-    generatedBaseValues:
-      profile: apiService
-      inputs:
-        serviceName: svc-media
-        containerPort: 4003
-        routePrefix: /media
-        configMapName: svc-media-stg-config
-        secretName: svc-media-stg-secrets
-        tlsSecretName: media-stg-tls
-        secretTemplates:
-          DATABASE_URL: MEDIA_DATABASE_URL
-          SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
-        extraEnv:
-          - name: OIDC_ISSUER
-            fromPlatformIdentityConfigKey: OIDC_ISSUER
-          - name: OIDC_AUDIENCE
-            fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
-          - name: S3_ACCESS_KEY
-            fromPlatformIdentitySecretKey: S3_ACCESS_KEY
-          - name: S3_SECRET_KEY
-            fromPlatformIdentitySecretKey: S3_SECRET_KEY
+    smoke: false
     generatedValues:
       profile: outboxWorker
       overlay:
@@ -197,32 +138,13 @@ deploy:
   prd:
     release: svc-media
     namespace: apps-prd
-    chart: app-chart
-    repo: https://charts.leultewolde.com
-    repoCredentialId: helm-chart-creds
     valuesFiles:
       - .ci/values-prd.yaml
     generatedBaseValues:
-      profile: apiService
       inputs:
-        serviceName: svc-media
-        containerPort: 4003
-        routePrefix: /media
         configMapName: svc-media-prd-config
         secretName: svc-media-secrets
         tlsSecretName: media-prd-tls
-        secretTemplates:
-          DATABASE_URL: MEDIA_DATABASE_URL
-          SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
-        extraEnv:
-          - name: OIDC_ISSUER
-            fromPlatformIdentityConfigKey: OIDC_ISSUER
-          - name: OIDC_AUDIENCE
-            fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
-          - name: S3_ACCESS_KEY
-            fromPlatformIdentitySecretKey: S3_ACCESS_KEY
-          - name: S3_SECRET_KEY
-            fromPlatformIdentitySecretKey: S3_SECRET_KEY
     smoke:
       url: https://api.mereb.app/media/healthz
       retries: 3
@@ -230,34 +152,10 @@ deploy:
       timeout: 60s
 
   prd_outbox:
+    extends: prd
     release: svc-media-outbox
     namespace: apps-prd
-    chart: app-chart
-    repo: https://charts.leultewolde.com
-    repoCredentialId: helm-chart-creds
-    valuesFiles:
-      - .ci/values-prd.yaml
-    generatedBaseValues:
-      profile: apiService
-      inputs:
-        serviceName: svc-media
-        containerPort: 4003
-        routePrefix: /media
-        configMapName: svc-media-prd-config
-        secretName: svc-media-secrets
-        tlsSecretName: media-prd-tls
-        secretTemplates:
-          DATABASE_URL: MEDIA_DATABASE_URL
-          SPLUNK_HEC_TOKEN: SPLUNK_HEC_TOKEN
-        extraEnv:
-          - name: OIDC_ISSUER
-            fromPlatformIdentityConfigKey: OIDC_ISSUER
-          - name: OIDC_AUDIENCE
-            fromPlatformIdentityConfigKey: ENV_API_AUDIENCE
-          - name: S3_ACCESS_KEY
-            fromPlatformIdentitySecretKey: S3_ACCESS_KEY
-          - name: S3_SECRET_KEY
-            fromPlatformIdentitySecretKey: S3_SECRET_KEY
+    smoke: false
     generatedValues:
       profile: outboxWorker
       overlay:
