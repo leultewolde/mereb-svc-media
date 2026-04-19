@@ -4,9 +4,6 @@ configMap:
   data:
     PORT: "4003"
     MEDIA_EVENTS_ENABLED: "true"
-    KAFKA_BROKERS: platform-dev-redpanda-0.platform-dev-redpanda.platform-dev.svc.cluster.local:9092
-    KAFKA_SSL: "true"
-    KAFKA_SSL_INSECURE: "true"
     S3_ENDPOINT: http://platform-dev-minio.platform-dev.svc.cluster.local:9000
     S3_PRESIGN_ENDPOINT: https://uploads-dev.mereb.app
     S3_REGION: us-east-1
