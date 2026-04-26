@@ -1,5 +1,6 @@
 import type { IResolvers } from '@graphql-tools/utils';
 import { GraphQLScalarType, Kind, type ValueNode } from 'graphql';
+import { mapInstanceofToGraphQLError } from '@mereb/shared-packages';
 import type { MediaApplicationModule } from '../../../application/media/use-cases.js';
 import type { GraphQLContext } from '../../../context.js';
 import {
@@ -58,28 +59,15 @@ function toKind(kind: string): string {
 }
 
 function toGraphQLError(error: unknown): never {
-  if (error instanceof AuthenticationRequiredError) {
-    throw new Error('UNAUTHENTICATED');
-  }
-  if (error instanceof MediaAssetOwnershipError) {
-    throw new Error('MEDIA_ASSET_FORBIDDEN');
-  }
-  if (error instanceof MediaAssetNotFoundError) {
-    throw new Error('MEDIA_ASSET_NOT_FOUND');
-  }
-  if (error instanceof UnsupportedMediaContentTypeError) {
-    throw new Error('UNSUPPORTED_MEDIA_TYPE');
-  }
-  if (error instanceof MediaObjectTooLargeError) {
-    throw new Error('MEDIA_TOO_LARGE');
-  }
-  if (error instanceof MediaObjectNotFoundError) {
-    throw new Error('MEDIA_OBJECT_NOT_FOUND');
-  }
-  if (error instanceof MediaStorageUnavailableError) {
-    throw new Error('MEDIA_STORAGE_UNAVAILABLE');
-  }
-  throw error;
+  mapInstanceofToGraphQLError(error, [
+    [AuthenticationRequiredError, 'UNAUTHENTICATED'],
+    [MediaAssetOwnershipError, 'MEDIA_ASSET_FORBIDDEN'],
+    [MediaAssetNotFoundError, 'MEDIA_ASSET_NOT_FOUND'],
+    [UnsupportedMediaContentTypeError, 'UNSUPPORTED_MEDIA_TYPE'],
+    [MediaObjectTooLargeError, 'MEDIA_TOO_LARGE'],
+    [MediaObjectNotFoundError, 'MEDIA_OBJECT_NOT_FOUND'],
+    [MediaStorageUnavailableError, 'MEDIA_STORAGE_UNAVAILABLE']
+  ]);
 }
 
 export function createResolvers(
